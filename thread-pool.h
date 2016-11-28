@@ -5,7 +5,7 @@ typedef struct tpool_work{
     void* (*routine)(void*);
     void *arg;
     struct tpool_work *next;
-}tpool_work_t;
+} tpool_work_t;
 
 typedef struct tpool{
     int shutdown;
@@ -14,7 +14,7 @@ typedef struct tpool{
     tpool_work_t *queue_head;
     pthread_mutex_t queue_lock;
     pthread_cond_t queue_ready;
-}
+} tpool_t;
 
 int tpool_create(int max_thr_num);
 

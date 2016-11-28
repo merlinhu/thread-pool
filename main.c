@@ -1,16 +1,16 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "tpool.h"
+#include "thread-pool.h"
 
 void *func(void* arg){
-    printf("thread %d\n", (int)arg);
+    printf("thread %p\n", arg);
     return NULL;
 }
 
 int main(int argc, char**argv){
     if(tpool_create(5) != 0){
-        print("tpool_create failed \n");
+        printf("tpool_create failed \n");
         exit(1);
     }
 

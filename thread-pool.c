@@ -3,10 +3,10 @@
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
-
+#include "thread-pool.h"
 static tpool_t *tpool = NULL;
 
-static void* tread_routine(void *arg){
+static void* thread_routine(void *arg){
     tpool_work_t *work;
 
     while(1){
@@ -15,8 +15,8 @@ static void* tread_routine(void *arg){
             pthread_cond_wait(&tpool->queue_ready, &tpool->queue_lock);
         }
         if(tpool->shutdown){
-            pthread_mutex_unlock(&pool->queue_lock);
-            ptread_exit(NULL);
+            pthread_mutex_unlock(&tpool->queue_lock);
+            pthread_exit(NULL);
         }
         work = tpool->queue_head;
         tpool->queue_head = tpool->queue_head->next;
@@ -39,7 +39,7 @@ int tpool_create(int max_thr_num){
 
     tpool->max_thr_num = max_thr_num;
     tpool->shutdown = 0;
-    tpool->queue_head = NULL；
+    tpool->queue_head = NULL;
     if(pthread_mutex_init(&tpool->queue_lock, NULL) != 0){
         printf("%s: pthread_mutex_init failed, errno:%d, error:%s\n", __func__, errno, strerror(errno));
         exit(1);
@@ -67,7 +67,7 @@ void tpool_destroy(){
     tpool->shutdown = 1;
     pthread_mutex_lock(&tpool->queue_lock);
     pthread_cond_broadcast(&tpool->queue_ready);
-    pthread_mutex_unlock(&tpool->queue_unlock);
+    pthread_mutex_unlock(&tpool->queue_lock);
 
     for(i=0;i<tpool->max_thr_num; ++i){
         pthread_join(tpool->thr_id[i], NULL);
@@ -78,6 +78,9 @@ void tpool_destroy(){
         tpool->queue_head = tpool->queue_head->next;
         free(member);
     }
+    pthread_mutex_destroy(&tpool->queue_lock); 
+    pthread_cond_destroy(&tpool->queue_ready);
+    free(tpool);
 }
 
 int tpool_add_work(void*(*routine)(void*), void* arg){
@@ -87,6 +90,11 @@ int tpool_add_work(void*(*routine)(void*), void* arg){
         return -1;
     }
 
+    work = malloc(sizeof(tpool_work_t));
+    if(!work){
+        printf("%s:malloc failed\n", __func__);
+        return -1;
+    }
     work->routine = routine;
     work->arg = arg;
     work->next = NULL;
@@ -94,11 +102,16 @@ int tpool_add_work(void*(*routine)(void*), void* arg){
     pthread_mutex_lock(&tpool->queue_lock);
     member = tpool->queue_head;
     if(!member){
-        member = member->next;
+        tpool->queue_head = work;
+    }else{
+        while(member->next){
+            member = member->next;
+        }
+        member->next = work;
     }
-    member->next = work;
-    ptread_cond_signal(&tpool->queue_ready);
-    phtread_mutex_unlock(&tpool->queue_lock);
+
+    pthread_cond_signal(&tpool->queue_ready);
+    pthread_mutex_unlock(&tpool->queue_lock);
 
     return 0;
 }
